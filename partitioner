@@ -1,0 +1,38 @@
+#|/bin/bash
+case "$1" in
+    join|partition)
+        echo "${1} mode selected"
+        modeflag=""
+        if [ "$1" = "join"  ]; then modeflag="-D"; else modeflag="-A"; fi
+        iplist=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $(docker ps -aq -f "name=$3"))
+        cmd=""
+        echo "${iplist}"
+        for i in $iplist; do
+            if [ "${cmd}" != "" ]; then
+                cmd="${cmd} &"
+            fi
+            cmd="${cmd} iptables -w ${modeflag} OUTPUT -s ${i} -j DROP & iptables -w ${modeflag} INPUT -s ${i} -j DROP"
+        done
+        echo ${cmd}
+        ;;
+    join-all)
+        echo "${1} mode selected"
+        cmd="iptables -F"
+        ;;    
+    *)
+        echo ""
+        echo "   Usage:"
+        echo "    partitioner <mode> <target service> <blocked service>"
+        echo ""
+        echo "    Mode:"
+        echo "       - partition <target service> <blocked service> - create a network blockade from <target service> to <blocked service>" 
+        echo "       - join <target service> <blocked service> - remove blockades in <target service> to <blocked service>"
+        echo "       - join-all <target service> - remove all network blockades in <target service>"
+        exit 1
+esac
+targetlist=$(docker ps -aq -f "name=$2")
+for t in $targetlist; do
+    echo "Executing: ${t} $(docker ps -f "id=${t}" --format="{{.Image}}")"
+    docker exec -t --privileged ${t} bash -c "${cmd}"
+done
+echo "Done"
